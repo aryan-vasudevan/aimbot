@@ -1,26 +1,40 @@
-# 1. Import the library
+# Import libraries
 import os
+import time
+import math
 from dotenv import load_dotenv
 from inference_sdk import InferenceHTTPClient
+import mss
+import pyautogui
+from PIL import Image
 
 # Load environment variables
 load_dotenv()
 
-# 2. Connect to your local server
+# Connect to the local inference server
 client = InferenceHTTPClient(
     api_url=os.getenv("API_URL"),
     api_key=os.getenv("API_KEY")
 )
 
-# 3. Run your workflow on an image
-result = client.run_workflow(
-    workspace_name=os.getenv("WORKSPACE_NAME"),
-    workflow_id=os.getenv("WORKFLOW_ID"),
-    images={
-        "image": "test.png" # Path to your image file
-    },
-    use_cache=True # Speeds up repeated requests
-)
+# Configuration
+SCREEN_WIDTH = 3440
+SCREEN_HEIGHT = 1440
+DETECTION_INTERVAL = 0.1  # Time between detections in seconds
 
-# 4. Get your results
-print(result)
+
+def capture_screen():
+    # Captures a screenshot of the entire screen
+    with mss.mss() as sct:
+        monitor = sct.monitors[1]  # Primary monitor
+        screenshot = sct.grab(monitor)
+        # Convert to PIL Image
+        img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
+        return img
+
+
+def get_bounding_box_center(prediction):
+    # Returns the center point of a bounding box
+    center_x = prediction['x']
+    center_y = prediction['y']
+    return (center_x, center_y)

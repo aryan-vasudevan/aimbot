@@ -33,8 +33,32 @@ def capture_screen():
         return img
 
 
-def get_bounding_box_center(prediction):
+def box_center(prediction):
     # Returns the center point of a bounding box
     center_x = prediction['x']
     center_y = prediction['y']
     return (center_x, center_y)
+
+
+def calculate_distance(point1, point2):
+    # Calculates the Euclidean distance between two points
+    return math.sqrt((point2[0] - point1[0])**2 + (point2[1] - point1[1])**2)
+
+
+def find_closest_target(predictions, crosshair_position):
+    # Finds the target closest to the crosshair
+    if not predictions:
+        return None
+
+    closest_target = None
+    min_distance = float('inf')
+
+    for prediction in predictions:
+        target_center = box_center(prediction)
+        distance = calculate_distance(crosshair_position, target_center)
+
+        if distance < min_distance:
+            min_distance = distance
+            closest_target = prediction
+
+    return closest_target

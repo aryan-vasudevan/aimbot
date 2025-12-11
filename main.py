@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 from inference_sdk import InferenceHTTPClient
 import mss
 from PIL import Image
-import pyautogui
+import win32api
+import win32con
 from pynput import keyboard as pynput_keyboard
 
 # Load environment variables
@@ -25,7 +26,6 @@ DETECTION_INTERVAL = 0.1
 
 # Global flag for kill switch
 running = True
-
 
 def on_press(key):
     global running
@@ -72,7 +72,11 @@ def find_closest_target(predictions, crosshair_position):
 
 
 def move_mouse_to_target(target_center):
-    pyautogui.moveTo(target_center[0], target_center[1], duration=0.1)
+    x = int(target_center[0])
+    y = int(target_center[1])
+    win32api.mouse_event(win32con.MOUSEEVENTF_MOVE | win32con.MOUSEEVENTF_ABSOLUTE, x, y, 0, 0)
+    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
 
 
 def run_detection(image):
@@ -86,28 +90,21 @@ def run_detection(image):
         return result[0].get('predictions', {}).get('predictions', [])
     return []
 
+print("Starting aimbot... Press P to stop.")
 
-def main():
-    global running
-    print("Starting aimbot... Press P to stop.")
+crosshair_position = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+print(f"Crosshair: {crosshair_position}")
 
-    crosshair_position = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-    print(f"Crosshair: {crosshair_position}")
+while running:
+    screenshot = capture_screen()
+    predictions = run_detection(screenshot)
 
-    while running:
-        screenshot = capture_screen()
-        predictions = run_detection(screenshot)
+    if predictions:
+        closest = find_closest_target(predictions, crosshair_position)
+        if closest:
+            target_center = box_center(closest)
+            distance = calculate_distance(crosshair_position, target_center)
+            print(f"Target: {target_center}, Distance: {distance:.0f}px, Confidence: {closest['confidence']:.0%}")
+            move_mouse_to_target(target_center)
 
-        if predictions:
-            closest = find_closest_target(predictions, crosshair_position)
-            if closest:
-                target_center = box_center(closest)
-                distance = calculate_distance(crosshair_position, target_center)
-                print(f"Target: {target_center}, Distance: {distance:.0f}px, Confidence: {closest['confidence']:.0%}")
-                move_mouse_to_target(target_center)
-
-        time.sleep(DETECTION_INTERVAL)
-
-
-if __name__ == "__main__":
-    main()
+    time.sleep(DETECTION_INTERVAL)

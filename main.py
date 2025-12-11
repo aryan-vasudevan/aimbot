@@ -5,8 +5,9 @@ import math
 from dotenv import load_dotenv
 from inference_sdk import InferenceHTTPClient
 import mss
-import pyautogui
 from PIL import Image
+import pyautogui
+from pynput import keyboard as pynput_keyboard
 
 # Load environment variables
 load_dotenv()
@@ -20,33 +21,40 @@ client = InferenceHTTPClient(
 # Configuration
 SCREEN_WIDTH = 3440
 SCREEN_HEIGHT = 1440
-DETECTION_INTERVAL = 0.1  # Time between detections in seconds
+DETECTION_INTERVAL = 0.1
+
+# Global flag for kill switch
+running = True
+
+
+def on_press(key):
+    global running
+    if hasattr(key, 'char') and key.char == 'p':
+        print("\n[Stopping aimbot...]")
+        running = False
+        return False
+
+listener = pynput_keyboard.Listener(on_press=on_press)
+listener.start()
 
 
 def capture_screen():
-    # Captures a screenshot of the entire screen
     with mss.mss() as sct:
-        monitor = sct.monitors[1]  # Primary monitor
+        monitor = sct.monitors[1]
         screenshot = sct.grab(monitor)
-        # Convert to PIL Image
         img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
         return img
 
 
 def box_center(prediction):
-    # Returns the center point of a bounding box
-    center_x = prediction['x']
-    center_y = prediction['y']
-    return (center_x, center_y)
+    return (prediction['x'], prediction['y'])
 
 
 def calculate_distance(point1, point2):
-    # Calculates the Euclidean distance between two points
     return math.sqrt((point2[0] - point1[0])**2 + (point2[1] - point1[1])**2)
 
 
 def find_closest_target(predictions, crosshair_position):
-    # Finds the target closest to the crosshair
     if not predictions:
         return None
 
@@ -56,9 +64,50 @@ def find_closest_target(predictions, crosshair_position):
     for prediction in predictions:
         target_center = box_center(prediction)
         distance = calculate_distance(crosshair_position, target_center)
-
         if distance < min_distance:
             min_distance = distance
             closest_target = prediction
 
     return closest_target
+
+
+def move_mouse_to_target(target_center):
+    pyautogui.moveTo(target_center[0], target_center[1], duration=0.1)
+
+
+def run_detection(image):
+    result = client.run_workflow(
+        workspace_name=os.getenv("WORKSPACE_NAME"),
+        workflow_id=os.getenv("WORKFLOW_ID"),
+        images={"image": image},
+        use_cache=False
+    )
+    if result and len(result) > 0:
+        return result[0].get('predictions', {}).get('predictions', [])
+    return []
+
+
+def main():
+    global running
+    print("Starting aimbot... Press P to stop.")
+
+    crosshair_position = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+    print(f"Crosshair: {crosshair_position}")
+
+    while running:
+        screenshot = capture_screen()
+        predictions = run_detection(screenshot)
+
+        if predictions:
+            closest = find_closest_target(predictions, crosshair_position)
+            if closest:
+                target_center = box_center(closest)
+                distance = calculate_distance(crosshair_position, target_center)
+                print(f"Target: {target_center}, Distance: {distance:.0f}px, Confidence: {closest['confidence']:.0%}")
+                move_mouse_to_target(target_center)
+
+        time.sleep(DETECTION_INTERVAL)
+
+
+if __name__ == "__main__":
+    main()
